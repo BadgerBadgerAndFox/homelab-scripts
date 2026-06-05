@@ -1,0 +1,15 @@
+[Unit]
+Description=qBittorrent client
+After=network.target nordvpnd.service
+Requires=nordvpnd.service
+
+[Service]
+Type=simple
+User=root
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do ip link show nordlynx 2>/dev/null | grep -q UP && exit 0; sleep 1; done; echo "nordlynx not up after 30s, starting anyway"; exit 0'
+ExecStart=/opt/qbittorrent/qbittorrent-nox
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
