@@ -1,0 +1,11 @@
+# Sudoers drop-in for claude-mcp (Bifrost MCP SSH user)
+# Allows passwordless sudo for specific commands needed by the MCP toolchain
+# Applied: 2026-06-06
+# Host: Docker host (Debian 13 trixie)
+#
+# Allowed commands:
+#   tee, cp, mv, mkdir, chmod, chown  - file write/management operations
+#   docker                            - container management
+#   systemctl                         - service management
+
+claude-mcp ALL=(ALL) NOPASSWD: /usr/bin/tee, /bin/cp, /bin/mv, /bin/mkdir, /bin/chmod, /bin/chown, /usr/bin/docker, /bin/systemctl
