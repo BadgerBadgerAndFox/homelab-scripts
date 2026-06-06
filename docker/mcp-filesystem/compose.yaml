@@ -29,7 +29,8 @@ services:
         limits:
           memory: 256m
     healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9918' || exit 1"]
+      # supergateway image uses sh not bash; /dev/tcp is a bashism - use node instead
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(9918,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 3
