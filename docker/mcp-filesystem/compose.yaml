@@ -1,0 +1,38 @@
+services:
+  mcp-filesystem:
+    image: supercorp/supergateway
+    container_name: mcp-filesystem
+    restart: unless-stopped
+    ports:
+      - "9918:9918"
+    volumes:
+      - /etc/traefik:/mnt/traefik:ro
+      - /etc/prometheus:/mnt/prometheus:rw
+      - /etc/arcane/projects:/mnt/arcane-projects:rw
+      - /opt/homelab-scripts:/mnt/homelab-scripts:rw
+    command:
+      - --stdio
+      - npx -y @modelcontextprotocol/server-filesystem /mnt/traefik /mnt/prometheus /mnt/arcane-projects /mnt/homelab-scripts
+      - --port
+      - "9918"
+      - --outputTransport
+      - streamableHttp
+      - --stateful
+      - --sessionTimeout
+      - "300000"
+      - --streamableHttpPath
+      - /mcp
+      - --healthEndpoint
+      - /health
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9918' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - traefik.enable=false

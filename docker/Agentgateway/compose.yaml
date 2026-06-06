@@ -1,0 +1,45 @@
+# Agentgateway compose
+services:
+  agentgateway:
+    container_name: agentgateway
+    restart: unless-stopped
+    image: cr.agentgateway.dev/agentgateway:latest
+    ports:
+      - "15000:15000"
+    networks:
+      - agentgateway-net
+    volumes:
+      - /mnt/nas-share/agentgateway-data/config.yaml:/config.yaml
+    environment:
+      - ADMIN_ADDR=0.0.0.0:15000
+      - HA_TOKEN=${HA_TOKEN}
+    command: ["-f", "/config.yaml"]
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    healthcheck:
+      # distroless image - no shell available; use the binary's own -V flag
+      test: ["CMD", "/app/agentgateway", "-V"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.agentgateway-ui-redirect.redirectregex.regex=^(https?://[^/]+)/?$$"
+      - "traefik.http.middlewares.agentgateway-ui-redirect.redirectregex.replacement=$${1}/ui"
+      - "traefik.http.middlewares.agentgateway-ui-redirect.redirectregex.permanent=false"
+      - "traefik.http.services.agentgateway-ui.loadbalancer.server.url=http://docker.lan.retiarius.co.nz:15000"
+      - "traefik.http.routers.agentgateway-ui.rule=Host(`agentgateway-ui.retiarius.co.nz`) || Host(`agentgateway-ui.home.retiarius.co.nz`)"
+      - "traefik.http.routers.agentgateway-ui.entrypoints=websecure"
+      - "traefik.http.routers.agentgateway-ui.tls=true"
+      - "traefik.http.routers.agentgateway-ui.tls.certresolver=cloudflare"
+      - "traefik.http.routers.agentgateway-ui.tls.domains[0].main=retiarius.co.nz"
+      - "traefik.http.routers.agentgateway-ui.tls.domains[0].sans=*.retiarius.co.nz,*.home.retiarius.co.nz"
+      - "traefik.http.routers.agentgateway-ui.service=agentgateway-ui"
+      - "traefik.http.routers.agentgateway-ui.middlewares=agentgateway-ui-redirect"
+      - "traefik.http.routers.agentgateway-ui.priority=1"
+networks:
+  agentgateway-net:
+    external: true

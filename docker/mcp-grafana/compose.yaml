@@ -1,0 +1,24 @@
+services:
+  mcp-grafana:
+    image: grafana/mcp-grafana:latest
+    container_name: mcp-grafana
+    restart: unless-stopped
+    ports:
+      - "9917:8000"
+    environment:
+      - GRAFANA_URL=http://192.168.1.82:3000
+      - GRAFANA_API_KEY=${GRAFANA_API_KEY}   # set in .env or env_file
+    command: ["--transport", "streamable-http", "--address", "0.0.0.0:8000"]
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    healthcheck:
+      # grafana/mcp-grafana image has no curl/wget/python3 - use bash /dev/tcp
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - traefik.enable=false

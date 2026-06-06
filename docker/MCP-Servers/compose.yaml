@@ -1,0 +1,126 @@
+services:
+  # ─────────────────────────────────────────────────────────────────────
+  # Proxmox MCP — native SSE, consumed by agentgateway
+  # ─────────────────────────────────────────────────────────────────────
+  proxmox-mcp:
+    image: ghcr.io/rekklesna/proxmoxmcp-plus:latest
+    container_name: proxmox-mcp
+    restart: unless-stopped
+    networks:
+      - agentgateway-net
+    volumes:
+      - /mnt/nas-share/proxmox-mcp/config.json:/app/proxmox-config/config.json:ro
+    environment:
+      - PROXMOX_MCP_MODE=mcp-http
+      - MCP_ALLOWED_HOSTS=proxmox-mcp:8000,proxmox-mcp:*,localhost:*,*:*
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('localhost',8000),3).close()\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────────
+  # SSH MCP (pve01) — streamable HTTP, consumed directly by Bifrost
+  # ─────────────────────────────────────────────────────────────────────
+  ssh-mcp:
+    image: node:22-alpine
+    container_name: ssh-mcp
+    restart: unless-stopped
+    networks:
+      - agentgateway-net
+    volumes:
+      - ssh-mcp-keys:/root/.ssh
+      - ssh-mcp-modules:/usr/local/lib/node_modules
+      - ssh-mcp-bin:/usr/local/bin
+    command:
+      - sh
+      - -c
+      - |
+        command -v supergateway >/dev/null || npm install -g ssh-mcp supergateway
+        exec supergateway \
+          --stdio "ssh-mcp -- --host=pve01.lan.retiarius.co.nz --user=claude-mcp --key=/root/.ssh/id_ed25519" \
+          --outputTransport streamableHttp \
+          --stateful \
+          --port 8002 \
+          --streamableHttpPath /mcp
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(8002,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────────
+  # SSH MCP (docker/Arcane) — streamable HTTP, consumed directly by Bifrost
+  # ─────────────────────────────────────────────────────────────────────
+  ssh-mcp-docker:
+    image: node:22-alpine
+    container_name: ssh-mcp-docker
+    restart: unless-stopped
+    networks:
+      - agentgateway-net
+    volumes:
+      - ssh-mcp-keys:/root/.ssh
+      - ssh-mcp-docker-modules:/usr/local/lib/node_modules
+      - ssh-mcp-docker-bin:/usr/local/bin
+    command:
+      - sh
+      - -c
+      - |
+        command -v supergateway >/dev/null || npm install -g ssh-mcp supergateway
+        exec supergateway \
+          --stdio "ssh-mcp -- --host=docker.lan.retiarius.co.nz --user=claude-mcp --key=/root/.ssh/id_ed25519" \
+          --outputTransport streamableHttp \
+          --stateful \
+          --port 8004 \
+          --streamableHttpPath /mcp
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(8004,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Arcane MCP — streamable HTTP, consumed directly by Bifrost
+  # ─────────────────────────────────────────────────────────────────────
+  arcane-mcp:
+    image: node:22-alpine
+    container_name: arcane-mcp
+    restart: unless-stopped
+    networks:
+      - agentgateway-net
+    volumes:
+      - arcane-mcp-modules:/usr/local/lib/node_modules
+      - arcane-mcp-bin:/usr/local/bin
+    environment:
+      - ARCANE_BASE_URL=${ARCANE_BASE_URL}
+      - ARCANE_API_KEY=${ARCANE_API_KEY}
+    command:
+      - sh
+      - -c
+      - |
+        command -v supergateway >/dev/null || npm install -g @randomsynergy/arcane-mcp-server supergateway
+        exec supergateway \
+          --stdio "arcane-mcp-server" \
+          --outputTransport streamableHttp \
+          --stateful \
+          --port 8003 \
+          --streamableHttpPath /mcp
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(8003,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  ssh-mcp-keys:
+    external: true
+  ssh-mcp-modules:
+  ssh-mcp-bin:
+  ssh-mcp-docker-modules:
+  ssh-mcp-docker-bin:
+  arcane-mcp-modules:
+  arcane-mcp-bin:
+
+networks:
+  agentgateway-net:
+    external: true

@@ -1,0 +1,46 @@
+networks:
+  bifrost-net:
+    external: true
+  agentgateway-net:
+    external: true
+
+services:
+  bifrost:
+    image: maximhq/bifrost:latest
+    container_name: bifrost
+    restart: unless-stopped
+    networks:
+      - bifrost-net
+      - agentgateway-net
+    volumes:
+      - /mnt/nas-share/bifrost-data:/app/data
+    ports:
+      - "8080:8080"
+    environment:
+      - GOGC=200
+      - GOMEMLIMIT=900MiB
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.bifrost.loadbalancer.server.url=http://docker.lan.retiarius.co.nz:8080"
+      - "traefik.http.routers.bifrost-api.rule=(Host(`bifrost.retiarius.co.nz`) || Host(`bifrost.home.retiarius.co.nz`)) && PathPrefix(`/v1`)"
+      - "traefik.http.routers.bifrost-api.entrypoints=websecure"
+      - "traefik.http.routers.bifrost-api.tls=true"
+      - "traefik.http.routers.bifrost-api.service=bifrost"
+      - "traefik.http.routers.bifrost-api.priority=20"
+      - "traefik.http.routers.bifrost.rule=Host(`bifrost.retiarius.co.nz`) || Host(`bifrost.home.retiarius.co.nz`)"
+      - "traefik.http.routers.bifrost.entrypoints=websecure"
+      - "traefik.http.routers.bifrost.tls=true"
+      - "traefik.http.routers.bifrost.tls.certresolver=cloudflare"
+      - "traefik.http.routers.bifrost.tls.domains[0].main=retiarius.co.nz"
+      - "traefik.http.routers.bifrost.tls.domains[0].sans=*.retiarius.co.nz,*.home.retiarius.co.nz"
+      - "traefik.http.routers.bifrost.service=bifrost"
+      - "traefik.http.routers.bifrost.priority=1"

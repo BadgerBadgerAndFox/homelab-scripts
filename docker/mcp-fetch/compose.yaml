@@ -1,0 +1,33 @@
+services:
+  mcp-fetch:
+    image: supercorp/supergateway:uvx
+    container_name: mcp-fetch
+    restart: unless-stopped
+    ports:
+      - "9919:9919"
+    command:
+      - --stdio
+      - uvx mcp-server-fetch
+      - --port
+      - "9919"
+      - --outputTransport
+      - streamableHttp
+      - --stateful
+      - --sessionTimeout
+      - "300000"
+      - --streamableHttpPath
+      - /mcp
+      - --healthEndpoint
+      - /health
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9919' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - traefik.enable=false

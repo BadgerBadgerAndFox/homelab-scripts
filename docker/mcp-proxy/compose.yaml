@@ -1,0 +1,44 @@
+networks:
+  bifrost-net:
+    external: true
+volumes:
+  mcp-proxy-deps:
+services:
+  mcp-proxy:
+    image: python:3.12-slim
+    container_name: mcp-proxy
+    restart: unless-stopped
+    networks:
+      - bifrost-net
+    working_dir: /app
+    command: bash -c "[ -f /deps/.done ] || (pip install -q --target /deps fastapi 'uvicorn[standard]' httpx 'PyJWT[crypto]' && touch /deps/.done); PYTHONPATH=/deps python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers"
+    volumes:
+      - /opt/mcp-proxy/main.py:/app/main.py:ro
+      - mcp-proxy-deps:/deps
+    env_file:
+      - .env
+    ports:
+      - "8081:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import socket; socket.create_connection((\"localhost\",8080),5).close()'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.mcp-proxy.loadbalancer.server.url=http://docker.lan.retiarius.co.nz:8081"
+      - "traefik.http.routers.bifrost-discovery.rule=(Host(`bifrost.retiarius.co.nz`) || Host(`bifrost.home.retiarius.co.nz`)) && PathPrefix(`/.well-known/`)"
+      - "traefik.http.routers.bifrost-discovery.entrypoints=websecure"
+      - "traefik.http.routers.bifrost-discovery.tls=true"
+      - "traefik.http.routers.bifrost-discovery.service=mcp-proxy"
+      - "traefik.http.routers.bifrost-discovery.priority=30"
+      - "traefik.http.routers.bifrost-mcp.rule=(Host(`bifrost.retiarius.co.nz`) || Host(`bifrost.home.retiarius.co.nz`)) && PathPrefix(`/mcp`)"
+      - "traefik.http.routers.bifrost-mcp.entrypoints=websecure"
+      - "traefik.http.routers.bifrost-mcp.tls=true"
+      - "traefik.http.routers.bifrost-mcp.service=mcp-proxy"
+      - "traefik.http.routers.bifrost-mcp.priority=20"

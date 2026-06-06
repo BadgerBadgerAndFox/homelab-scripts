@@ -1,0 +1,26 @@
+services:
+  unifi-exporter:
+    image: python:3.12-slim
+    container_name: unifi-exporter
+    restart: unless-stopped
+    ports:
+      - "9916:9916"
+    environment:
+      - UNIFI_API_KEY=${UNIFI_API_KEY}   # set in .env or env_file
+      - UNIFI_HOST=192.168.1.1
+      - EXPORTER_PORT=9916
+    volumes:
+      - /etc/arcane/projects/unifi-exporter/exporter.py:/exporter.py:ro
+    command: python3 /exporter.py
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:9916/metrics\", timeout=5)'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - traefik.enable=false
