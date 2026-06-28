@@ -1,127 +1,196 @@
-# garage-door-cover.yaml
+# garage-door-cover.yaml — DEPLOYED 2026-06-28 (haos VM, /config/templates.yaml)
 #
 # Garage door "Cover" entity built from a Shelly Plus 1 (single relay, used
 # as a momentary pulse to mimic the wall button) plus two Sensor Add-on
-# inputs reporting door position:
+# inputs reporting door position.
 #
-#   binary_sensor.garage_close_sensor  <- input:0   (built-in terminal, decoupled from switch:0)
-#   binary_sensor.garage_open_sensor   <- input:100 (addon digital_in)
-#   switch.garage_door_relay           <- switch:0  (momentary pulse output)
+# Physical device: shellyplus1-cc7b5c0beb80 (MAC CC:7B:5C:0B:EB:80),
+# IP 192.168.4.201 (note: separate subnet from the main 192.168.1.0/24 LAN —
+# reachable from haos VM, not yet investigated further).
+#
+#   binary_sensor.shellyplus1_cc7b5c0beb80_input_0    <- input:0   (CLOSE sensor, built-in terminal, decoupled from switch:0)
+#   binary_sensor.shellyplus1_cc7b5c0beb80_input_100  <- input:100 (OPEN sensor, addon digital_in)
+#   switch.shellyplus1_cc7b5c0beb80                   <- switch:0  (momentary pulse output; device-side auto_off=true/1.0s is a second safety net)
 #
 # A Shelly Plus 1 only has ONE relay channel, so it cannot run the native
 # Shelly "Cover" component (that requires a 2-relay device like a Plus 2PM).
 # This config recreates the cover behaviour in Home Assistant instead,
 # including a transient opening/closing state while the door is travelling
-# between the two sensors (driven by input_boolean.garage_door_travelling +
-# the automations below).
+# between the two sensors, tracked via input_boolean.garage_door_travelling
+# + input_select.garage_door_direction (set by the automations below — this
+# replaces an earlier draft that referenced a nonexistent
+# sensor.garage_door_last_direction).
 #
-# Adjust entity IDs to match your actual Shelly device names in HA.
+# Uses modern template (`action:`/`trigger:`) syntax to match this HA
+# instance's existing conventions (see cover.driveway_gate for precedent).
+#
+# Entity registry name overrides (Garage Close Sensor / Garage Open Sensor /
+# Garage Door Relay) were attempted on the binary_sensor/switch entities but
+# did not persist across a core restart — cosmetic only, friendly names fall
+# back to "Garage Door Input 0" / "Garage Door Input 100" / "Garage Door"
+# (derived from the device's name_by_user="Garage Door" + original_name).
+# Not investigated further since cover.garage_door itself is unaffected.
 
-input_boolean:
-  garage_door_travelling:
-    name: Garage Door Travelling
-    icon: mdi:garage-open
+# --- input_select.yaml ---
+# garage_door_direction:
+#   name: Garage Door Direction
+#   options:
+#     - opening
+#     - closing
+#   initial: opening
 
-cover:
-  - platform: template
-    covers:
-      garage_door:
-        device_class: garage
-        friendly_name: "Garage Door"
-        value_template: >
-          {% if is_state('binary_sensor.garage_close_sensor', 'on') %}
-            closed
-          {% elif is_state('binary_sensor.garage_open_sensor', 'on') %}
-            open
-          {% elif is_state('input_boolean.garage_door_travelling', 'on') %}
-            {{ states('sensor.garage_door_last_direction') | default('open') }}
-          {% else %}
-            open
-          {% endif %}
-        open_cover:
-          - condition: state
-            entity_id: binary_sensor.garage_close_sensor
-            state: "on"
-          - service: script.turn_on
-            target:
-              entity_id: script.garage_door_pulse
-        close_cover:
-          - condition: state
-            entity_id: binary_sensor.garage_open_sensor
-            state: "on"
-          - service: script.turn_on
-            target:
-              entity_id: script.garage_door_pulse
-        stop_cover:
-          - condition: state
-            entity_id: input_boolean.garage_door_travelling
-            state: "on"
-          - service: script.turn_on
-            target:
-              entity_id: script.garage_door_pulse
-        icon_template: >
-          {% if is_state('binary_sensor.garage_close_sensor', 'on') %}
-            mdi:garage
-          {% else %}
-            mdi:garage-open
-          {% endif %}
+# --- input_boolean.yaml ---
+# garage_door_travelling:
+#   name: Garage Door Travelling
+#   icon: mdi:garage-open
 
-script:
-  garage_door_pulse:
-    alias: "Pulse Garage Door Relay"
-    sequence:
-      - service: switch.turn_on
-        target:
-          entity_id: switch.garage_door_relay
-      - delay:
-          milliseconds: 500
-      - service: switch.turn_off
-        target:
-          entity_id: switch.garage_door_relay
-
-automation:
-  - alias: "Garage Door - mark travelling when leaving closed/open position"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.garage_close_sensor
-        from: "on"
-      - platform: state
-        entity_id: binary_sensor.garage_open_sensor
-        from: "on"
-    action:
-      - service: input_boolean.turn_on
-        target:
+# --- templates.yaml (appended) ---
+- cover:
+    - name: "Garage Door"
+      unique_id: garage_door_shelly_cover
+      device_class: garage
+      state: >
+        {% if is_state('binary_sensor.shellyplus1_cc7b5c0beb80_input_0', 'on') %}
+          closed
+        {% elif is_state('binary_sensor.shellyplus1_cc7b5c0beb80_input_100', 'on') %}
+          open
+        {% elif is_state('input_boolean.garage_door_travelling', 'on') %}
+          {{ states('input_select.garage_door_direction') }}
+        {% else %}
+          open
+        {% endif %}
+      icon: >
+        {% if is_state('binary_sensor.shellyplus1_cc7b5c0beb80_input_0', 'on') %}
+          mdi:garage
+        {% else %}
+          mdi:garage-open
+        {% endif %}
+      open_cover:
+        - condition: state
+          entity_id: binary_sensor.shellyplus1_cc7b5c0beb80_input_0
+          state: "on"
+        - action: input_select.select_option
+          target:
+            entity_id: input_select.garage_door_direction
+          data:
+            option: opening
+        - action: script.turn_on
+          target:
+            entity_id: script.garage_door_pulse
+      close_cover:
+        - condition: state
+          entity_id: binary_sensor.shellyplus1_cc7b5c0beb80_input_100
+          state: "on"
+        - action: input_select.select_option
+          target:
+            entity_id: input_select.garage_door_direction
+          data:
+            option: closing
+        - action: script.turn_on
+          target:
+            entity_id: script.garage_door_pulse
+      stop_cover:
+        - condition: state
           entity_id: input_boolean.garage_door_travelling
+          state: "on"
+        - action: script.turn_on
+          target:
+            entity_id: script.garage_door_pulse
 
-  - alias: "Garage Door - clear travelling when a sensor is reached"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.garage_close_sensor
-        to: "on"
-      - platform: state
-        entity_id: binary_sensor.garage_open_sensor
-        to: "on"
-    action:
-      - service: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.garage_door_travelling
+# --- scripts.yaml ---
+# garage_door_pulse:
+#   alias: "Pulse Garage Door Relay"
+#   sequence:
+#     - action: switch.turn_on
+#       target:
+#         entity_id: switch.shellyplus1_cc7b5c0beb80
+#     - delay:
+#         milliseconds: 500
+#     - action: switch.turn_off
+#       target:
+#         entity_id: switch.shellyplus1_cc7b5c0beb80
 
-  - alias: "Garage Door - safety timeout if travelling too long"
-    description: >
-      Fail-safe: if neither sensor triggers within the door's expected
-      travel time (e.g. limit switch fault), clear the travelling flag
-      so the UI doesn't get stuck and an alert can fire separately.
-    trigger:
-      - platform: state
-        entity_id: input_boolean.garage_door_travelling
-        to: "on"
-        for:
-          seconds: 25
-    action:
-      - service: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.garage_door_travelling
-      - service: persistent_notification.create
-        data:
-          title: "Garage Door"
-          message: "Door did not reach an open/closed sensor within 25s of moving. Check for an obstruction or sensor fault."
+# --- automations.yaml ---
+- id: '1772308801001'
+  alias: "Garage Door - mark travelling when leaving closed/open position"
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.shellyplus1_cc7b5c0beb80_input_0
+    from: 'on'
+  - trigger: state
+    entity_id:
+    - binary_sensor.shellyplus1_cc7b5c0beb80_input_100
+    from: 'on'
+  conditions: []
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.garage_door_travelling
+  mode: single
+- id: '1772308801002'
+  alias: "Garage Door - clear travelling when a sensor is reached"
+  description: ''
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.shellyplus1_cc7b5c0beb80_input_0
+    to: 'on'
+  - trigger: state
+    entity_id:
+    - binary_sensor.shellyplus1_cc7b5c0beb80_input_100
+    to: 'on'
+  conditions: []
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.garage_door_travelling
+  mode: single
+- id: '1772308801003'
+  alias: "Garage Door - safety timeout if travelling too long"
+  description: >-
+    Fail-safe: if neither sensor triggers within the door's expected travel
+    time (e.g. limit switch fault), clear the travelling flag so the UI
+    doesn't get stuck and an alert can fire separately.
+  triggers:
+  - trigger: state
+    entity_id:
+    - input_boolean.garage_door_travelling
+    to: 'on'
+    for:
+      seconds: 25
+  conditions: []
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.garage_door_travelling
+  - action: persistent_notification.create
+    data:
+      title: "Garage Door"
+      message: "Door did not reach an open/closed sensor within 25s of moving. Check for an obstruction or sensor fault."
+  mode: single
+
+# --- HomeKit exposure ---
+# Dedicated single-accessory HomeKit Bridge config entry (matches the
+# Driveway Gate / Front Door / Pedestrian Gate / Storeroom Door / Side Door
+# pattern — one bridge per door-type accessory):
+#   title: Garage Door:21072
+#   port: 21072
+#   mode: accessory
+#   include_entities: [cover.garage_door]
+#   Setup code: 258-59-104
+#   Setup payload: X-HM://0042XFV34USO0
+#   *** Not yet paired in the Apple Home app — manual step for the owner ***
+#
+# IMPORTANT — Matterbridge conflict:
+# This device was already being auto-discovered and bridged via
+# matterbridge-shelly (mDNS, enableMdnsDiscover=true), exposing switch:0 as a
+# bare on/off switch — a duplicate, less-useful tile alongside the proper
+# garage-door cover above. Blacklisted in matterbridge-shelly.config.json:
+#   blackList: ["shellyplus1-A8032ABC68D8", "shellyplus1-CC7B5C0BEB80"]
+# (uppercase-MAC mDNS id, confirmed live via ShellyMdnsScanner log output —
+# same case-sensitivity gotcha as the driveway gate fix). Applied via
+# `ha apps restart 246dd49f_matterbridge`. As with the driveway gate, any
+# stale Matter accessory tile left in Apple Home from before the blacklist
+# may need manual removal — this can't be done remotely.
