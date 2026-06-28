@@ -1,0 +1,127 @@
+# garage-door-cover.yaml
+#
+# Garage door "Cover" entity built from a Shelly Plus 1 (single relay, used
+# as a momentary pulse to mimic the wall button) plus two Sensor Add-on
+# inputs reporting door position:
+#
+#   binary_sensor.garage_close_sensor  <- input:100 (digital_in)
+#   binary_sensor.garage_open_sensor   <- input:101 (analog_in, thresholded)
+#   switch.garage_door_relay           <- switch:0  (momentary pulse output)
+#
+# A Shelly Plus 1 only has ONE relay channel, so it cannot run the native
+# Shelly "Cover" component (that requires a 2-relay device like a Plus 2PM).
+# This config recreates the cover behaviour in Home Assistant instead,
+# including a transient opening/closing state while the door is travelling
+# between the two sensors (driven by input_boolean.garage_door_travelling +
+# the automations below).
+#
+# Adjust entity IDs to match your actual Shelly device names in HA.
+
+input_boolean:
+  garage_door_travelling:
+    name: Garage Door Travelling
+    icon: mdi:garage-open
+
+cover:
+  - platform: template
+    covers:
+      garage_door:
+        device_class: garage
+        friendly_name: "Garage Door"
+        value_template: >
+          {% if is_state('binary_sensor.garage_close_sensor', 'on') %}
+            closed
+          {% elif is_state('binary_sensor.garage_open_sensor', 'on') %}
+            open
+          {% elif is_state('input_boolean.garage_door_travelling', 'on') %}
+            {{ states('sensor.garage_door_last_direction') | default('open') }}
+          {% else %}
+            open
+          {% endif %}
+        open_cover:
+          - condition: state
+            entity_id: binary_sensor.garage_close_sensor
+            state: "on"
+          - service: script.turn_on
+            target:
+              entity_id: script.garage_door_pulse
+        close_cover:
+          - condition: state
+            entity_id: binary_sensor.garage_open_sensor
+            state: "on"
+          - service: script.turn_on
+            target:
+              entity_id: script.garage_door_pulse
+        stop_cover:
+          - condition: state
+            entity_id: input_boolean.garage_door_travelling
+            state: "on"
+          - service: script.turn_on
+            target:
+              entity_id: script.garage_door_pulse
+        icon_template: >
+          {% if is_state('binary_sensor.garage_close_sensor', 'on') %}
+            mdi:garage
+          {% else %}
+            mdi:garage-open
+          {% endif %}
+
+script:
+  garage_door_pulse:
+    alias: "Pulse Garage Door Relay"
+    sequence:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.garage_door_relay
+      - delay:
+          milliseconds: 500
+      - service: switch.turn_off
+        target:
+          entity_id: switch.garage_door_relay
+
+automation:
+  - alias: "Garage Door - mark travelling when leaving closed/open position"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.garage_close_sensor
+        from: "on"
+      - platform: state
+        entity_id: binary_sensor.garage_open_sensor
+        from: "on"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.garage_door_travelling
+
+  - alias: "Garage Door - clear travelling when a sensor is reached"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.garage_close_sensor
+        to: "on"
+      - platform: state
+        entity_id: binary_sensor.garage_open_sensor
+        to: "on"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.garage_door_travelling
+
+  - alias: "Garage Door - safety timeout if travelling too long"
+    description: >
+      Fail-safe: if neither sensor triggers within the door's expected
+      travel time (e.g. limit switch fault), clear the travelling flag
+      so the UI doesn't get stuck and an alert can fire separately.
+    trigger:
+      - platform: state
+        entity_id: input_boolean.garage_door_travelling
+        to: "on"
+        for:
+          seconds: 25
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.garage_door_travelling
+      - service: persistent_notification.create
+        data:
+          title: "Garage Door"
+          message: "Door did not reach an open/closed sensor within 25s of moving. Check for an obstruction or sensor fault."
