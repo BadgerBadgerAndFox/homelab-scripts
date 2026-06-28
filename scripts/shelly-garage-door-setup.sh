@@ -4,8 +4,8 @@
 #
 # Configures a Shelly Plus 1 + Sensor Add-on as a garage door pulse-relay
 # controller with two position sensors:
-#   - input:0   (built-in SW terminal, decoupled from switch:0) -> OPEN sensor
-#   - input:100 (digital_in, addon DI terminal)                  -> CLOSE sensor
+#   - input:0   (built-in SW terminal, decoupled from switch:0) -> CLOSE sensor
+#   - input:100 (digital_in, addon DI terminal)                  -> OPEN  sensor
 #
 # switch:0 (the relay) only ever pulses the door -- it is decoupled
 # (in_mode: detached) from input:0 so the built-in input can be repurposed
@@ -34,13 +34,13 @@ echo "    Add-on enabled. Device will need a reboot before peripherals can be ad
 echo "    Run: curl -sS -X POST ${BASE} -d '{\"id\":1,\"method\":\"Shelly.Reboot\"}'"
 read -rp "    Press Enter once the device has rebooted to continue..." _
 
-echo "==> 2. Adding digital input peripheral (CLOSE sensor) -> input:100"
+echo "==> 2. Adding digital input peripheral (OPEN sensor) -> input:100"
 rpc "SensorAddon.AddPeripheral" '{"type":"digital_in","attrs":{"cid":100}}'
 echo
 
-echo "==> 3. Configuring input:100 (CLOSE sensor) as a stateful switch input"
+echo "==> 3. Configuring input:100 (OPEN sensor) as a stateful switch input"
 echo "    Set invert:true here if the sensor reads inverted vs. expected (test physically)."
-rpc "Input.SetConfig" '{"id":100,"config":{"name":"Garage Close Sensor","type":"switch","invert":false}}'
+rpc "Input.SetConfig" '{"id":100,"config":{"name":"Garage Open Sensor","type":"switch","invert":false}}'
 echo
 
 echo "==> 4. Decoupling the relay (switch:0) from the built-in input (input:0)"
@@ -48,9 +48,9 @@ echo "    so input:0 stops driving the relay and can be repurposed as a pure sen
 rpc "Switch.SetConfig" '{"id":0,"config":{"name":"Garage Door Relay","in_mode":"detached","initial_state":"off"}}'
 echo
 
-echo "==> 5. Configuring input:0 (built-in terminal) as the OPEN sensor"
+echo "==> 5. Configuring input:0 (built-in terminal) as the CLOSE sensor"
 echo "    Set invert:true here if the sensor reads inverted vs. expected (test physically)."
-rpc "Input.SetConfig" '{"id":0,"config":{"name":"Garage Open Sensor","type":"switch","invert":false}}'
+rpc "Input.SetConfig" '{"id":0,"config":{"name":"Garage Close Sensor","type":"switch","invert":false}}'
 echo
 
 echo "==> Done. Relay is pulsed on demand from Home Assistant via:"
