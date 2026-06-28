@@ -2,18 +2,15 @@
 #
 # shelly-garage-door-setup.sh
 #
-# Configures a Shelly Plus 1 + standard Sensor Add-on as a garage door
-# pulse-relay controller with two position sensors:
-#   - input:100 (digital_in, addon DI terminal)  -> CLOSE sensor (reed switch)
-#   - input:101 (analog_in,  addon AI terminal)   -> OPEN  sensor (reed switch)
+# Configures a Shelly Plus 1 + Sensor Add-on as a garage door pulse-relay
+# controller with two position sensors:
+#   - input:0   (built-in SW terminal, decoupled from switch:0) -> OPEN sensor
+#   - input:100 (digital_in, addon DI terminal)                  -> CLOSE sensor
 #
-# NOTE: The standard (non-Pro) Shelly Sensor Add-on only exposes ONE true
-# digital input + ONE analog input + ONE 1-wire bus. Two genuine digital_in
-# peripherals are NOT available on this hardware combo (that requires
-# ShellyPlusI4 or a Pro device + ProSensorAddon). This script wires the
-# second sensor to the analog input and treats it as a threshold/boolean
-# input on the Home Assistant side. See README in this folder / chat for
-# full explanation.
+# switch:0 (the relay) only ever pulses the door -- it is decoupled
+# (in_mode: detached) from input:0 so the built-in input can be repurposed
+# as a pure position sensor instead of a button that drives the relay.
+# The addon's analog input (would-be input:101) is NOT used in this setup.
 #
 # Usage: ./shelly-garage-door-setup.sh <shelly-ip>
 
@@ -41,27 +38,23 @@ echo "==> 2. Adding digital input peripheral (CLOSE sensor) -> input:100"
 rpc "SensorAddon.AddPeripheral" '{"type":"digital_in","attrs":{"cid":100}}'
 echo
 
-echo "==> 3. Adding analog input peripheral (OPEN sensor) -> input:101"
-rpc "SensorAddon.AddPeripheral" '{"type":"analog_in","attrs":{"cid":101}}'
-echo
-
-echo "==> 4. Configuring input:100 (CLOSE sensor) as a stateful switch input"
+echo "==> 3. Configuring input:100 (CLOSE sensor) as a stateful switch input"
 echo "    Set invert:true here if the sensor reads inverted vs. expected (test physically)."
 rpc "Input.SetConfig" '{"id":100,"config":{"name":"Garage Close Sensor","type":"switch","invert":false}}'
 echo
 
-echo "==> 5. Setting analog report threshold for input:101 (OPEN sensor)"
-echo "    Lower this if the open/closed transition doesn't register reliably."
-rpc "Input.SetConfig" '{"id":101,"config":{"name":"Garage Open Sensor","type":"analog","report_thr":5}}'
+echo "==> 4. Decoupling the relay (switch:0) from the built-in input (input:0)"
+echo "    so input:0 stops driving the relay and can be repurposed as a pure sensor."
+rpc "Switch.SetConfig" '{"id":0,"config":{"name":"Garage Door Relay","in_mode":"detached","initial_state":"off"}}'
 echo
 
-echo "==> 6. Detaching the relay (switch:0) from the local input/button"
-echo "    so the addon sensors never drive the relay directly -- only RPC/HA pulses it."
-rpc "Switch.SetConfig" '{"id":0,"config":{"name":"Garage Door Relay","in_mode":"detached","initial_state":"off"}}'
+echo "==> 5. Configuring input:0 (built-in terminal) as the OPEN sensor"
+echo "    Set invert:true here if the sensor reads inverted vs. expected (test physically)."
+rpc "Input.SetConfig" '{"id":0,"config":{"name":"Garage Open Sensor","type":"switch","invert":false}}'
 echo
 
 echo "==> Done. Relay is pulsed on demand from Home Assistant via:"
 echo '    Switch.Set {"id":0,"on":true,"toggle_after":0.5}'
 echo
 echo "    See home-assistant/garage-door-cover.yaml for the template cover + automations"
-echo "    that turn switch:0 + input:100 + input:101 into a single garage door entity."
+echo "    that turn switch:0 + input:0 + input:100 into a single garage door entity."
