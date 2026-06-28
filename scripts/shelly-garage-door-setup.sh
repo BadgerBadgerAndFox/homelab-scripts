@@ -2,6 +2,14 @@
 #
 # shelly-garage-door-setup.sh
 #
+# STATUS (2026-06-28): Already applied and confirmed against the live
+# device — shellyplus1-cc7b5c0beb80 (MAC CC:7B:5C:0B:EB:80), 192.168.4.201.
+# Confirmed via Switch.GetConfig / Input.GetConfig:
+#   switch:0   in_mode=detached, initial_state=off, auto_off=true (1.0s) -- relay auto-cuts as a second safety net beyond HA's 500ms pulse script
+#   input:0    type=switch  (CLOSE sensor)
+#   input:100  type=switch  (OPEN sensor)
+# This script is kept for reference / re-provisioning a replacement unit.
+#
 # Configures a Shelly Plus 1 + Sensor Add-on as a garage door pulse-relay
 # controller with two position sensors:
 #   - input:0   (built-in SW terminal, decoupled from switch:0) -> CLOSE sensor
@@ -57,4 +65,6 @@ echo "==> Done. Relay is pulsed on demand from Home Assistant via:"
 echo '    Switch.Set {"id":0,"on":true,"toggle_after":0.5}'
 echo
 echo "    See home-assistant/garage-door-cover.yaml for the template cover + automations"
-echo "    that turn switch:0 + input:0 + input:100 into a single garage door entity."
+echo "    that turn switch:0 + input:0 + input:100 into a single garage door entity, plus"
+echo "    the HomeKit bridge config entry and the matterbridge-shelly blacklist entry"
+echo "    needed to avoid a duplicate Matter accessory for the same device."
